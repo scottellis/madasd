@@ -1,7 +1,7 @@
 CC = gcc
 CFLAGS = -Wall -O2
 
-OBJS = madasd.o utility.o commands.o
+OBJS = madasd.o utility.o
 
 TARGET = madasd
 

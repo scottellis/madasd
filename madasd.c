@@ -18,12 +18,14 @@
 #include <getopt.h>
 
 #include "utility.h"
-#include "commands.h"
 
-#define DEFAULT_CONTROL_PORT 6788
+#define DEFAULT_CONTROL_PORT 6000
 
 static void control_loop(int control_sock);
 static void client_handler(int c_sock);
+static int do_start(int c_sock);
+static int do_stop(int c_sock);
+static int do_status(int c_sock);
 static void sig_handler(int sig);
 static int add_sig_handlers();
 
@@ -32,12 +34,15 @@ volatile int shutdown_event;
 int control_port;
 int debug_mode;
 
+
+int state;
+
 void usage(char *argv_0)
 {
 	printf("Usage: %s -p<port>\n", argv_0);
 	printf("  -p     control listener port, data will be port + 1\n");
 	printf("  -d     debug mode, do NOT daemonize\n");
-    exit(1);
+	exit(1);
 }
 
 void parse_args(int argc, char **argv)
@@ -115,38 +120,44 @@ void control_loop(int control_sock)
 		else {
 			memset(c_ip, 0, sizeof(c_ip));
 			inet_ntop(AF_INET, &c_addr_in.sin_addr, c_ip, INET_ADDRSTRLEN);
-			syslog(LOG_INFO, "new client %s\n", c_ip);
 			client_handler(c_sock);
 			close(c_sock);
-			syslog(LOG_INFO, "closed client %s\n", c_ip);
 		}
 	}
 }
 
-/*
- * The control socket handles commands sent from client.
- * When start command is received, open a data socket for client
- * to connect to. Start another thread to do this.
- * When stop command is received, stop the data thread which will
- * also close the data socket.
- */
 void client_handler(int c_sock)
 {
-    char rx[128];
+	char rx[128];
 
 	memset(rx, 0, sizeof(rx));
 
 	if (read_cmd(c_sock, rx, sizeof(rx) - 1, 2000) < 0)
 		return;
 
-	int cmd = command_id(rx);
+	if (!strncmp("start", rx, 5))
+		do_start(c_sock);
+	else if (!strncmp("stop", rx, 4))
+		do_stop(c_sock);
+	else if (!strncmp("status", rx, 6))
+		do_status(c_sock);
+	else
+		send_response(c_sock, "invalid command");
+}
 
-	if (cmd < 0) {
-		syslog(LOG_WARNING, "Invalid cmd: %s\n", rx);
-		return;
-	}
+int do_start(int c_sock)
+{
+	return send_response(c_sock, "ok");
+}
 
-	dispatch_command(c_sock, cmd, NULL);
+int do_stop(int c_sock)
+{
+	return send_response(c_sock, "ok");
+}
+
+int do_status(int c_sock)
+{
+	return send_response(c_sock, "ok");
 }
 
 void sig_handler(int sig)
