@@ -70,7 +70,6 @@ int read_cmd(int sock, char *buff, int maxlen, int timeout)
 
 int send_response(int sock, const char *str)
 {
-	int len;
 	int sent;
 	int total;
 
@@ -82,7 +81,7 @@ int send_response(int sock, const char *str)
 	sent = 0;
 
 	while (sent < total) {
-		len = write(sock, str + sent, total - sent);
+		int len = write(sock, str + sent, total - sent);
 
 		if (len <= 0) {
 			syslog(LOG_ERR, "send_response write: %m\n");
@@ -100,6 +99,27 @@ int send_response(int sock, const char *str)
 	}
 
 	return 0;
+}
+
+int send_binary(int sock, unsigned char *data, int size)
+{
+	int sent = 0;
+	
+	if (!data)
+		return -1;
+
+	while (sent < size) {
+		int len = write(sock, data + sent, size - sent);
+
+		if (len <= 0) {
+			syslog(LOG_ERR, "send_binary write: %m\n");
+			return -1;
+		}
+
+		sent += len;
+	}
+
+	return sent;
 }
 
 int start_listener(int port)

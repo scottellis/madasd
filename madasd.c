@@ -18,6 +18,7 @@
 #include <getopt.h>
 #include <pthread.h>
 
+#include "ads127x.h"
 #include "utility.h"
 
 #define DEFAULT_CONTROL_PORT 6000
@@ -218,38 +219,63 @@ void data_loop(int data_sock)
 	struct sockaddr_in c_addr_in;
 	socklen_t c_len;
 	int c_sock;
+    fd_set rset;
+	struct timespec timeout;
 	char c_ip[INET_ADDRSTRLEN + 8];
 
+	timeout.tv_sec = 2;
+	timeout.tv_nsec = 0;
+
 	while (!data_stop) {
-		c_len = sizeof(c_addr_in);
-		c_sock = accept(data_sock, (struct sockaddr *) &c_addr_in, &c_len);
+		FD_ZERO(&rset);
+		FD_SET(data_sock, &rset);
 
-		if (c_sock < 0) {
-			if (!data_stop)
-				syslog(LOG_WARNING, "accept: %m\n");
+		if (pselect(data_sock + 1, &rset, NULL, NULL, &timeout, NULL) < 0) {
+			if (errno != EINTR)
+				syslog(LOG_WARNING, "pselect: %m");
 		}
-		else {
-			memset(c_ip, 0, sizeof(c_ip));
+		else if (FD_ISSET(data_sock, &rset)) {
+			c_len = sizeof(c_addr_in);
+			c_sock = accept(data_sock, (struct sockaddr *) &c_addr_in, &c_len);
 
-			if (debug_mode) {
-				inet_ntop(AF_INET, &c_addr_in.sin_addr, c_ip, INET_ADDRSTRLEN);
-				syslog(LOG_INFO, "new data client: %s\n", c_ip);
+			if (c_sock < 0) {
+				if (!data_stop)
+					syslog(LOG_WARNING, "accept: %m\n");
 			}
+			else {
+				memset(c_ip, 0, sizeof(c_ip));
 
-			data_client_handler(c_sock);
-			close(c_sock);
+				if (debug_mode) {
+					inet_ntop(AF_INET, &c_addr_in.sin_addr, c_ip, INET_ADDRSTRLEN);
+					syslog(LOG_INFO, "new data client: %s\n", c_ip);
+				}
+
+				data_client_handler(c_sock);
+				close(c_sock);
+			}
 		}
 	}
 }
 
 void data_client_handler(int c_sock)
 {
-	char tx[64];
-	int count = 0;
+	unsigned char *blocks;
+	int max_blocks = 32;
+	int num_blocks = 1;
+
+    blocks = (unsigned char *) malloc(max_blocks * ADS_BLOCKSIZE);
 
 	while (!data_stop) {
-		sprintf(tx, "data: %d", ++count);
-		send_response(c_sock, tx);
+		memset(blocks, 0, max_blocks * ADS_BLOCKSIZE);
+		num_blocks = ads_read(blocks, max_blocks);
+
+		if (num_blocks > 0) {
+			int sent = send_binary(c_sock, blocks, num_blocks * ADS_BLOCKSIZE);
+
+			if (sent != (num_blocks * ADS_BLOCKSIZE))
+				syslog(LOG_WARNING, "error sending binary data\n");
+		}
+
 		msleep(2000);
 	}
 }

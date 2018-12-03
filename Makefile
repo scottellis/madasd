@@ -2,7 +2,7 @@ CC = gcc
 CFLAGS = -Wall -O2
 LIBS = -lpthread
 
-OBJS = madasd.o utility.o
+OBJS = ads127x.o madasd.o utility.o
 
 TARGET = madasd
 
