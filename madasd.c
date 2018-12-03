@@ -135,10 +135,10 @@ void control_loop(int control_sock)
 		}
 	}
 
-    if (data_thread) {
-        data_stop = 1;
+	if (data_thread) {
+		data_stop = 1;
 		pthread_join(data_thread, NULL);
-    }
+	}
 }
 
 void client_handler(int c_sock)
@@ -167,7 +167,7 @@ int do_start(int c_sock)
 
 	data_stop = 0;
 
-    if (pthread_create(&data_thread, NULL, data_thread_handler, NULL)) {
+	if (pthread_create(&data_thread, NULL, data_thread_handler, NULL)) {
 		syslog(LOG_WARNING, "pthread_create: %m\n");
 		return send_response(c_sock, "fail");
 	}
@@ -196,7 +196,7 @@ int do_status(int c_sock)
 
 static void * data_thread_handler(void *param)
 {
-    int data_sock = start_listener(control_port + 1);
+	int data_sock = start_listener(control_port + 1);
 
 	if (data_sock < 0) {
 		syslog(LOG_ERR, "Failed to open data socket");
