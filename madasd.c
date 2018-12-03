@@ -207,7 +207,7 @@ static void * data_thread_handler(void *param)
 
 	data_loop(data_sock);
 
-    close(data_sock);
+	close(data_sock);
 
 	syslog(LOG_INFO, "data thread stopped\n");
 
@@ -219,7 +219,7 @@ void data_loop(int data_sock)
 	struct sockaddr_in c_addr_in;
 	socklen_t c_len;
 	int c_sock;
-    fd_set rset;
+	fd_set rset;
 	struct timespec timeout;
 	char c_ip[INET_ADDRSTRLEN + 8];
 
@@ -263,7 +263,7 @@ void data_client_handler(int c_sock)
 	int max_blocks = 32;
 	int num_blocks = 1;
 
-    blocks = (unsigned char *) malloc(max_blocks * ADS_BLOCKSIZE);
+	blocks = (unsigned char *) malloc(max_blocks * ADS_BLOCKSIZE);
 
 	while (!data_stop) {
 		memset(blocks, 0, max_blocks * ADS_BLOCKSIZE);
