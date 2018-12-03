@@ -16,6 +16,7 @@
 #include <arpa/inet.h>
 #include <sys/select.h>
 #include <getopt.h>
+#include <pthread.h>
 
 #include "utility.h"
 
@@ -26,6 +27,9 @@ static void client_handler(int c_sock);
 static int do_start(int c_sock);
 static int do_stop(int c_sock);
 static int do_status(int c_sock);
+static void * data_thread_handler(void *param);
+static void data_loop(int data_sock);
+static void data_client_handler(int c_sock);
 static void sig_handler(int sig);
 static int add_sig_handlers();
 
@@ -33,9 +37,9 @@ volatile int shutdown_event;
 
 int control_port;
 int debug_mode;
+pthread_t data_thread;
+int data_stop;
 
-
-int state;
 
 void usage(char *argv_0)
 {
@@ -119,11 +123,21 @@ void control_loop(int control_sock)
 		}
 		else {
 			memset(c_ip, 0, sizeof(c_ip));
-			inet_ntop(AF_INET, &c_addr_in.sin_addr, c_ip, INET_ADDRSTRLEN);
+
+			if (debug_mode) {
+				inet_ntop(AF_INET, &c_addr_in.sin_addr, c_ip, INET_ADDRSTRLEN);
+				syslog(LOG_INFO, "new client: %s\n", c_ip);
+			}
+
 			client_handler(c_sock);
 			close(c_sock);
 		}
 	}
+
+    if (data_thread) {
+        data_stop = 1;
+		pthread_join(data_thread, NULL);
+    }
 }
 
 void client_handler(int c_sock)
@@ -147,23 +161,105 @@ void client_handler(int c_sock)
 
 int do_start(int c_sock)
 {
+	if (data_thread)
+		return do_status(c_sock);
+
+	data_stop = 0;
+
+    if (pthread_create(&data_thread, NULL, data_thread_handler, NULL)) {
+		syslog(LOG_WARNING, "pthread_create: %m\n");
+		return send_response(c_sock, "fail");
+	}
+
 	return send_response(c_sock, "ok");
 }
 
 int do_stop(int c_sock)
 {
+	if (data_thread) {
+		data_stop = 1;
+		pthread_join(data_thread, NULL);
+		data_thread = 0;
+	}
+
 	return send_response(c_sock, "ok");
 }
 
 int do_status(int c_sock)
 {
-	return send_response(c_sock, "ok");
+	if (data_thread)
+		return send_response(c_sock, "started");
+	else
+		return send_response(c_sock, "stopped");
+}
+
+static void * data_thread_handler(void *param)
+{
+    int data_sock = start_listener(control_port + 1);
+
+	if (data_sock < 0) {
+		syslog(LOG_ERR, "Failed to open data socket");
+		return NULL;
+	}
+
+	syslog(LOG_INFO, "data thread started: port: %d\n", control_port + 1);
+
+	data_loop(data_sock);
+
+    close(data_sock);
+
+	syslog(LOG_INFO, "data thread stopped\n");
+
+	return NULL;
+}
+
+void data_loop(int data_sock)
+{
+	struct sockaddr_in c_addr_in;
+	socklen_t c_len;
+	int c_sock;
+	char c_ip[INET_ADDRSTRLEN + 8];
+
+	while (!data_stop) {
+		c_len = sizeof(c_addr_in);
+		c_sock = accept(data_sock, (struct sockaddr *) &c_addr_in, &c_len);
+
+		if (c_sock < 0) {
+			if (!data_stop)
+				syslog(LOG_WARNING, "accept: %m\n");
+		}
+		else {
+			memset(c_ip, 0, sizeof(c_ip));
+
+			if (debug_mode) {
+				inet_ntop(AF_INET, &c_addr_in.sin_addr, c_ip, INET_ADDRSTRLEN);
+				syslog(LOG_INFO, "new data client: %s\n", c_ip);
+			}
+
+			data_client_handler(c_sock);
+			close(c_sock);
+		}
+	}
+}
+
+void data_client_handler(int c_sock)
+{
+	char tx[64];
+	int count = 0;
+
+	while (!data_stop) {
+		sprintf(tx, "data: %d", ++count);
+		send_response(c_sock, tx);
+		msleep(2000);
+	}
 }
 
 void sig_handler(int sig)
 {
-	if (sig == SIGINT || sig == SIGTERM)
+	if (sig == SIGINT || sig == SIGTERM) {
+		data_stop = 1;
 		shutdown_event = 1;
+	}
 }
 
 int add_sig_handlers()
