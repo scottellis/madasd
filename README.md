@@ -2,7 +2,7 @@
 
 This is a simulator for the Gumstix Overo server for the modified madas project.
 
-The Gumstix will provide two sockets for clients.
+The server will provide two sockets for clients.
 
 A control socket for ASCII commands to be relayed to the ads1278 device driver (start, stop, config, status, etc...)
 
@@ -18,7 +18,7 @@ The data socket does not accept commands, it is read-only.
 
 Data will be dropped if a client is not continuously reading.
 
-The madasng server logs to syslog as well stderr.
+The server logs to syslog as well stderr.
 
 ### Fetch and Build
 
@@ -122,10 +122,10 @@ The madasd server fetches 32 blocks at a time from the driver to stream to clien
 
 Just for testing, every block gets stuffed with a different character.
 
-This is very simplistic right now. There is additional block timestamp data and gps data that also needs to be incorporated into the data stream and so there will be a header describing incoming data.
-
-This is just a start to let you write a client similar to the UI client that I am porting to this project for visualizing the acoustic data.
+This is very simplistic right now.
 
 The key being two sockets, control and data.
 
-I used netcat as the client to demonstrate that a client does not need any particularly difficult logic to receive the raw data.
+There is additional timestamp and gps data that needs to be incorporated into the data stream and so there will be a header to desscribe this.
+
+I used netcat for demonstration only.
