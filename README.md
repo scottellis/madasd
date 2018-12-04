@@ -42,8 +42,9 @@ There are a few command line options
 
 Some raw data capture files are provided in madasng/data
 
-* ch2\_1khz.raw
-* ch2\_2khz.raw
+    data/ch2_1khz.raw
+
+    data/ch2_2khz.raw
 
 They can be passed to the server at startup in which case the data returned will come from the file.
 
