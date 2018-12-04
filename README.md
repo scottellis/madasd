@@ -32,6 +32,35 @@ The server logs to syslog as well stderr.
     gcc -Wall -O2 -c -o utility.o utility.c
     gcc -Wall -O2 ads127x.o madasd.o utility.o -o madasd -lpthread
 
+There are a few command line options
+
+    ~/madasng$ ./madasd -h
+    Usage: ./madasd [-p<port>][-f<file>][-d]
+      -p     control listener port, data will be port + 1
+      -f     data file from real a capture
+      -d     debug mode, enable some extra output
+
+Some raw data capture files are provided in madasng/data
+
+* ch2\_1khz.raw
+* ch2\_2khz.raw
+
+They can be passed to the server at startup in which case the data returned will come from the file.
+
+    ~/madasng$ ./madasd -f data/ch2\_1khz.raw
+
+The raw data has the format
+
+    <ch1><ch2><ch3><ch4><ch5><ch6><ch7><ch8>[repeat]
+
+Each channel sample is a 32-bit integer, so one 'complete sample' is 8 * 4 = 32 bytes.
+
+Each 4096 byte block contains 4096 / 32 = 128 samples.
+
+The server returns 32 blocks of data at a time on the **data** socket. This is configurable in the madasd.c source file.
+
+If no data file is provided, the block data will be stuffed with ascii characters, a different character for each block.
+
 ### Testing with Netcat
 
 For explanation I am going to use three terminals **server**, **control** and **data**.

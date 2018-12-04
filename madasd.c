@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <netinet/in.h>
 #include <errno.h>
 #include <syslog.h>
@@ -22,6 +23,7 @@
 #include "utility.h"
 
 #define DEFAULT_CONTROL_PORT 6000
+#define BLOCKS_PER_READ 32
 
 static void control_loop(int control_sock);
 static void client_handler(int c_sock);
@@ -38,26 +40,29 @@ volatile int shutdown_event;
 
 int control_port;
 int debug_mode;
+char data_file[512];
 pthread_t data_thread;
 int data_stop;
 
-
 void usage(char *argv_0)
 {
-	printf("Usage: %s -p<port>\n", argv_0);
+	printf("Usage: %s [-p<port>][-f<file>][-d]\n", argv_0);
 	printf("  -p     control listener port, data will be port + 1\n");
-	printf("  -d     debug mode, do NOT daemonize\n");
+	printf("  -f     data file from real a capture\n");
+	printf("  -d     debug mode, enable some extra output\n");
 	exit(1);
 }
 
 void parse_args(int argc, char **argv)
 {
 	int opt;
+	struct stat sb;
 
 	control_port = DEFAULT_CONTROL_PORT;
 	debug_mode = 0;
+	memset(data_file, 0, sizeof(data_file));
 
-	while ((opt = getopt(argc, argv, "p:d")) != -1) {
+	while ((opt = getopt(argc, argv, "p:f:dh")) != -1) {
 		switch (opt) {
 		case 'p':
 			control_port = strtoul(optarg, NULL, 0);
@@ -69,8 +74,33 @@ void parse_args(int argc, char **argv)
 
 			break;
 
+		case 'f':
+			if (strlen(optarg) > 500) {
+				printf("Path to data file too long\n");
+				usage(argv[0]);
+			}
+
+			strcpy(data_file, optarg);
+			stat(data_file, &sb);
+
+			if (!S_ISREG(sb.st_mode)) {
+				printf("Data file arg is not a regular file\n");
+				usage(argv[0]);
+			}
+
+			if (sb.st_size < (ADS_BLOCKSIZE * BLOCKS_PER_READ)) {
+				printf("Data file is not big enough\n");
+				usage(argv[0]);
+			}
+
+			break;
+
 		case 'd':
 			debug_mode = 1;
+			break;
+
+		case 'h':
+			usage(argv[0]);
 			break;
 
 		default:
@@ -260,14 +290,17 @@ void data_loop(int data_sock)
 void data_client_handler(int c_sock)
 {
 	unsigned char *blocks;
-	int max_blocks = 32;
 	int num_blocks = 1;
 
-	blocks = (unsigned char *) malloc(max_blocks * ADS_BLOCKSIZE);
+	blocks = (unsigned char *) malloc(BLOCKS_PER_READ * ADS_BLOCKSIZE);
 
 	while (!data_stop) {
-		memset(blocks, 0, max_blocks * ADS_BLOCKSIZE);
-		num_blocks = ads_read(blocks, max_blocks);
+		memset(blocks, 0, BLOCKS_PER_READ * ADS_BLOCKSIZE);
+
+		if (data_file[0] != 0)
+			num_blocks = ads_read_file(data_file, blocks, BLOCKS_PER_READ);
+		else
+			num_blocks = ads_read(blocks, BLOCKS_PER_READ);
 
 		if (num_blocks > 0) {
 			int sent = send_binary(c_sock, blocks, num_blocks * ADS_BLOCKSIZE);
