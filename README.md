@@ -155,6 +155,6 @@ This is very simplistic right now.
 
 The key being two sockets, control and data.
 
-There is additional timestamp and gps data that needs to be incorporated into the data stream and so there will be a header to desscribe this.
+There is additional timestamp and gps data that needs to be incorporated into the data stream and so there will be a header to describe this.
 
 I used netcat for demonstration only.

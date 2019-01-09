@@ -25,7 +25,7 @@ int msleep(int ms)
 
 int read_cmd(int sock, char *buff, int maxlen, int timeout)
 {
-	int ret = -1;
+	int ret = 0;
 	int pos = 0;
 	int elapsed = 0;
 
@@ -36,6 +36,7 @@ int read_cmd(int sock, char *buff, int maxlen, int timeout)
 		if (len < 0) {
 			// client closed socket
 			syslog(LOG_WARNING, "cmd read: read: %m\n");
+			ret = -1;
 			break;
 		}
 		else if (len == 0) {
@@ -43,13 +44,11 @@ int read_cmd(int sock, char *buff, int maxlen, int timeout)
 
 			if (ret < 0) {
 				syslog(LOG_WARNING, "cmd read: nanosleep: %m");
+				ret = -1;
 				break;
 			}
 
 			elapsed += 50;
-
-			if (elapsed > timeout)
-				syslog(LOG_WARNING, "cmd read: timed out\n");
 		}
 		else {
 			if (buff[pos] == '\n') {
@@ -60,6 +59,7 @@ int read_cmd(int sock, char *buff, int maxlen, int timeout)
 
 			if (pos++ >= (maxlen - 1)) {
 				syslog(LOG_WARNING, "cmd read: %d bytes without newline\n", pos);
+				ret = -1;
 				break;
 			}
 		}
@@ -104,7 +104,7 @@ int send_response(int sock, const char *str)
 int send_binary(int sock, unsigned char *data, int size)
 {
 	int sent = 0;
-	
+
 	if (!data)
 		return -1;
 

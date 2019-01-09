@@ -27,6 +27,8 @@
 
 static void control_loop(int control_sock);
 static void client_handler(int c_sock);
+static int do_connect(int c_sock);
+static int do_disconnect(int c_sock);
 static int do_start(int c_sock);
 static int do_stop(int c_sock);
 static int do_status(int c_sock);
@@ -37,12 +39,13 @@ static void sig_handler(int sig);
 static int add_sig_handlers();
 
 volatile int shutdown_event;
+volatile int disconnect_event;
 
 int control_port;
 int debug_mode;
 char data_file[512];
 pthread_t data_thread;
-int data_stop;
+int running;
 
 void usage(char *argv_0)
 {
@@ -161,12 +164,13 @@ void control_loop(int control_sock)
 			}
 
 			client_handler(c_sock);
+			syslog(LOG_INFO, "client disconnect: %s\n", c_ip);
 			close(c_sock);
 		}
 	}
 
 	if (data_thread) {
-		data_stop = 1;
+		disconnect_event = 1;
 		pthread_join(data_thread, NULL);
 	}
 }
@@ -174,41 +178,67 @@ void control_loop(int control_sock)
 void client_handler(int c_sock)
 {
 	char rx[128];
+	int len;
 
-	memset(rx, 0, sizeof(rx));
+	do_connect(c_sock);
 
-	if (read_cmd(c_sock, rx, sizeof(rx) - 1, 2000) < 0)
+	if (!data_thread)
 		return;
 
-	if (!strncmp("start", rx, 5))
-		do_start(c_sock);
-	else if (!strncmp("stop", rx, 4))
-		do_stop(c_sock);
-	else if (!strncmp("status", rx, 6))
-		do_status(c_sock);
-	else
-		send_response(c_sock, "invalid command");
+	while (!shutdown_event) {
+		memset(rx, 0, sizeof(rx));
+
+		len = read_cmd(c_sock, rx, 32, 2000);
+
+		if (len	< 0)
+			return;
+
+		if (len > 0) {
+			if (!strcmp("start", rx)) {
+				syslog(LOG_INFO, "start\n");
+				do_start(c_sock);
+			}
+			else if (!strcmp("stop", rx)) {
+				syslog(LOG_INFO, "stop\n");
+				do_stop(c_sock);
+			}
+			else if (!strcmp("disconnect", rx)) {
+				syslog(LOG_INFO, "disconnect\n");
+				do_disconnect(c_sock);
+				break;
+			}
+			else if (!strcmp("status", rx)) {
+				syslog(LOG_INFO, "status\n");
+				do_status(c_sock);
+			}
+			else {
+				send_response(c_sock, "invalid command");
+			}
+		}
+	}
 }
 
-int do_start(int c_sock)
+int do_connect(int c_sock)
 {
-	if (data_thread)
-		return do_status(c_sock);
-
-	data_stop = 0;
+	disconnect_event = 0;
+	running = 0;
 
 	if (pthread_create(&data_thread, NULL, data_thread_handler, NULL)) {
 		syslog(LOG_WARNING, "pthread_create: %m\n");
+		data_thread = 0;
 		return send_response(c_sock, "fail");
 	}
 
 	return send_response(c_sock, "ok");
 }
 
-int do_stop(int c_sock)
+int do_disconnect(int c_sock)
 {
+	running = 0;
+
+	disconnect_event = 1;
+
 	if (data_thread) {
-		data_stop = 1;
 		pthread_join(data_thread, NULL);
 		data_thread = 0;
 	}
@@ -216,12 +246,27 @@ int do_stop(int c_sock)
 	return send_response(c_sock, "ok");
 }
 
+int do_start(int c_sock)
+{
+	//running = 1;
+	running = 0;
+
+	return send_response(c_sock, "ok");
+}
+
+int do_stop(int c_sock)
+{
+	running = 0;
+
+	return send_response(c_sock, "ok");
+}
+
 int do_status(int c_sock)
 {
 	if (data_thread)
-		return send_response(c_sock, "started");
+		return send_response(c_sock, "running");
 	else
-		return send_response(c_sock, "stopped");
+		return send_response(c_sock, "idle");
 }
 
 static void * data_thread_handler(void *param)
@@ -256,7 +301,7 @@ void data_loop(int data_sock)
 	timeout.tv_sec = 2;
 	timeout.tv_nsec = 0;
 
-	while (!data_stop) {
+	while (!disconnect_event) {
 		FD_ZERO(&rset);
 		FD_SET(data_sock, &rset);
 
@@ -269,7 +314,7 @@ void data_loop(int data_sock)
 			c_sock = accept(data_sock, (struct sockaddr *) &c_addr_in, &c_len);
 
 			if (c_sock < 0) {
-				if (!data_stop)
+				if (!disconnect_event)
 					syslog(LOG_WARNING, "accept: %m\n");
 			}
 			else {
@@ -281,6 +326,7 @@ void data_loop(int data_sock)
 				}
 
 				data_client_handler(c_sock);
+				syslog(LOG_INFO, "data client disconnect: %s\n", c_ip);
 				close(c_sock);
 			}
 		}
@@ -289,34 +335,41 @@ void data_loop(int data_sock)
 
 void data_client_handler(int c_sock)
 {
-	unsigned char *blocks;
 	int num_blocks = 1;
 
-	blocks = (unsigned char *) malloc(BLOCKS_PER_READ * ADS_BLOCKSIZE);
+	unsigned char *blocks = (unsigned char *) malloc(BLOCKS_PER_READ * ADS_BLOCKSIZE);
 
-	while (!data_stop) {
-		memset(blocks, 0, BLOCKS_PER_READ * ADS_BLOCKSIZE);
+	if (!blocks)
+		return;
 
-		if (data_file[0] != 0)
-			num_blocks = ads_read_file(data_file, blocks, BLOCKS_PER_READ);
-		else
-			num_blocks = ads_read(blocks, BLOCKS_PER_READ);
+	while (!disconnect_event) {
 
-		if (num_blocks > 0) {
-			int sent = send_binary(c_sock, blocks, num_blocks * ADS_BLOCKSIZE);
+		if (running) {
+			memset(blocks, 0, BLOCKS_PER_READ * ADS_BLOCKSIZE);
 
-			if (sent != (num_blocks * ADS_BLOCKSIZE))
-				syslog(LOG_WARNING, "error sending binary data\n");
+			if (data_file[0] != 0)
+				num_blocks = ads_read_file(data_file, blocks, BLOCKS_PER_READ);
+			else
+				num_blocks = ads_read(blocks, BLOCKS_PER_READ);
+
+			if (num_blocks > 0) {
+				int sent = send_binary(c_sock, blocks, num_blocks * ADS_BLOCKSIZE);
+
+				if (sent != (num_blocks * ADS_BLOCKSIZE))
+					syslog(LOG_WARNING, "error sending binary data\n");
+			}
 		}
 
-		msleep(2000);
+		msleep(500);
 	}
+
+	free(blocks);
 }
 
 void sig_handler(int sig)
 {
 	if (sig == SIGINT || sig == SIGTERM) {
-		data_stop = 1;
+		disconnect_event = 1;
 		shutdown_event = 1;
 	}
 }
