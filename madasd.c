@@ -262,7 +262,7 @@ int do_stop(int c_sock)
 
 int do_status(int c_sock)
 {
-	if (data_thread)
+	if (running)
 		return send_response(c_sock, "running");
 	else
 		return send_response(c_sock, "idle");
