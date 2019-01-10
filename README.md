@@ -8,12 +8,6 @@ A control socket for ASCII commands to be relayed to the ads1278 device driver (
 
 A data socket that will stream the ads1278 binary data.
 
-The control socket accepts one command and then closes the connection similar to http. Additionally a client has 2 seconds to send their command or the server kills the connection anyway.
-
-We can change this if it is inconvenient, but it simplifies the server code error handling.
-
-The data socket is only open if the driver is started and will close again when the driver is stopped.
-
 The data socket does not accept commands, it is read-only.
 
 Data will be dropped if a client is not continuously reading.
@@ -44,12 +38,13 @@ Some raw data capture files are provided in madasng/data
 
     data/ch2_1khz.raw
     data/ch2_2khz.raw
+    data/ch2_noise.raw
 
 They can be passed to the server at startup in which case the data returned will come from the file.
 
     ~/madasng$ ./madasd -f data/ch2_1khz.raw
 
-The raw data has the format
+The data has the raw ADC format
 
     <ch1><ch2><ch3><ch4><ch5><ch6><ch7><ch8>[repeat]
 
@@ -67,69 +62,73 @@ For explanation I am going to use three terminals **server**, **control** and **
 
 Start the **server** in a terminal
 
-    ~/madasng$ ./madasd
+    ~/madasng$ ./madasd -d
     ./madasd: control listening on port 6000
 
 Either on the same machine or another, start a **control** terminal
 
-    /tmp$ nc localhost 6000
+    /tmp$ nc 192.168.10.6 6000
+    ok
     status
-    stopped
-
-    /tmp$ nc localhost 6000
+    idle
     start
     ok
-
-    /tmp$ nc localhost 6000
     status
-    started
-
-    /tmp$ nc localhost 6000
+    running
     stop
     ok
-
-    /tmp$ nc localhost 6000
-    status
-    stopped
+    disconnect
+    ok
 
 
-On the **server** terminal where you started madasd you would have seen this
+On the **server** terminal where you started madasd you would have seen this with debugging (-d) enabled.
 
-    ~/madasng$ ./madasd
+    ~/madasng$ ./madasd -d
     ./madasd: control listening on port 6000
+    ./madasd: new client: 192.168.10.12
     ./madasd: data thread started: port: 6001
+    ./madasd: status
+    ./madasd: start
+    ./madasd: status
+    ./madasd: stop
+    ./madasd: disconnect
     ./madasd: data thread stopped
+    ./madasd: client disconnect: 192.168.10.12
 
 
 Now in the **control** terminal start the driver
 
     /tmp$ nc localhost 6000
-    start
-    ok
 
-In a new **data** terminal (any machine) use nc to pipe the data to a file
+In another **data** terminal open a second connection to the server for the data.
+The data port is always the control port + 1.
+Pipe this data to a file.
 
     /tmp$ nc localhost 6001 > data.bin
 
-Let it run for a little, but not too long, the data accumulates fast.
+Back in the control terminal, start the driver, let it run for a little then issue a stop and disconnect.
 
-Ten seconds is fine.
+The data accumulates fast, ten seconds is fine.
 
-Stop the driver in the **control** terminal.
-
-    /tmp$ nc localhost 6000
+    /tmp$ nc localhost 6000   < this is already going
+    start
+    ok
     stop
     ok
+    disconnect
+    ok
+
 
 The **data** connection should close automatically.
 
-    /tmp$ nc localhost 6001 > data.bin
+You should have gotten some data.
+
     /tmp$ ls -l data.bin
     -rw-rw-r-- 1 scott scott 1310720 Dec  3 11:00 data.bin
 
 You can look at the data with hexdump
 
-    /tmp$ hd data.bin
+    /tmp$ hexdump -C data.bin
     00000000  41 41 41 41 41 41 41 41  41 41 41 41 41 41 41 41  |AAAAAAAAAAAAAAAA|
     *
     00001000  42 42 42 42 42 42 42 42  42 42 42 42 42 42 42 42  |BBBBBBBBBBBBBBBB|
@@ -153,8 +152,24 @@ Just for testing, every block gets stuffed with a different character.
 
 This is very simplistic right now.
 
-The key being two sockets, control and data.
+The key being two sockets, one control and one data.
+
+You can also test with some data files in the madasng/data dir.
+
+    madasng$ ls -l data
+    total 1200
+    -rw-r--r-- 1 scott scott 409600 Jan  4 09:31 ch2_1khz.raw
+    -rw-r--r-- 1 scott scott 409600 Jan  4 09:31 ch2_2khz.raw
+    -rw-r--r-- 1 scott scott 409600 Jan 10 10:42 ch2_noise.raw
+
+Use the -f flag to point to one of these files and madasng will continously cycle through the file for the data it returns.
+
+    madasnt$ ./madasd -d -f data/ch2_1khz.raw
 
 There is additional timestamp and gps data that needs to be incorporated into the data stream and so there will be a header to describe this.
 
 I used netcat for demonstration only.
+
+Use the MadasUI Qt project for a GUI client that works with the madasd server.
+
+
