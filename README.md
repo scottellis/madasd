@@ -162,9 +162,9 @@ You can also test with some data files in the madasng/data dir.
     -rw-r--r-- 1 scott scott 409600 Jan  4 09:31 ch2_2khz.raw
     -rw-r--r-- 1 scott scott 409600 Jan 10 10:42 ch2_noise.raw
 
-Use the -f flag to point to one of these files and madasng will continously cycle through the file for the data it returns.
+The server will cycle through the file for the data it returns.
 
-    madasnt$ ./madasd -d -f data/ch2_1khz.raw
+    madasng$ ./madasd -d -f data/ch2_1khz.raw
 
 There is additional timestamp and gps data that needs to be incorporated into the data stream and so there will be a header to describe this.
 
