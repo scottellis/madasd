@@ -5,5 +5,6 @@
 
 int ads_read(unsigned char *blocks, int num_blocks);
 int ads_read_file(const char *filename, unsigned char *blocks, int num_blocks);
+void ads_dump_stats();
 
 #endif /* ifndef ADS127X_H */

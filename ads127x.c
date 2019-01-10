@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -6,6 +7,11 @@
 #include <syslog.h>
 
 #include "ads127x.h"
+
+static int data_block_pos;
+static int data_num_blocks;
+unsigned char *file_data;
+char *loaded_filename;
 
 int ads_read(unsigned char *blocks, int num_blocks)
 {
@@ -22,30 +28,106 @@ int ads_read(unsigned char *blocks, int num_blocks)
 	return num_blocks;
 }
 
-/*
-  Not trying to be robust here. If the file doesn't have enough data
-  to fulfill the request we fail.
-*/
-int ads_read_file(const char *filename, unsigned char *blocks, int num_blocks)
+int ads_file_loaded(const char *filename)
 {
-	int ret = -1;
+	if (loaded_filename
+			&& !strcmp(loaded_filename, filename)
+			&& data_num_blocks > 0
+			&& data_block_pos < data_num_blocks) {
+		return 1;
+	}
 
-	if (!filename || !*filename)
+	return 0;
+}
+
+int ads_init_file(const char *filename)
+{
+	struct stat st;
+
+	if (ads_file_loaded(filename))
+		return 0;
+
+	if (file_data) {
+		free(file_data);
+		file_data = NULL;
+		free(loaded_filename);
+		loaded_filename = NULL;
+		data_num_blocks = 0;
+		data_block_pos = 0;
+	}
+
+	if (stat(filename, &st) == -1)
+		return -1;
+
+	if (st.st_size < (ADS_BLOCKSIZE * 32))
+		return -1;
+
+	if (st.st_size > (ADS_BLOCKSIZE * 1000))
+		return -1;
+
+	if ((st.st_size % ADS_BLOCKSIZE) != 0)
+		return -1;
+
+	file_data = malloc(st.st_size);
+
+	if (!file_data)
 		return -1;
 
 	int fd = open(filename, O_RDONLY);
 
-	if (fd < 0) {
-		syslog(LOG_WARNING, "ads_read_file: open: %m\n");
-		return -1;
-	}
-
-	int len = read(fd, blocks, num_blocks * ADS_BLOCKSIZE);
-
-	if (len == (num_blocks * ADS_BLOCKSIZE))
-		ret = num_blocks;
+	int len = read(fd, file_data, st.st_size);
 
 	close(fd);
 
-	return ret;
+	if (len != st.st_size) {
+		free(file_data);
+		file_data = NULL;
+		return -1;
+	}
+
+	loaded_filename = strdup(filename);
+
+	data_block_pos = 0;
+	data_num_blocks = len / ADS_BLOCKSIZE;
+
+	return 1;
+}
+
+void ads_dump_stats()
+{
+	syslog(LOG_WARNING, "data_num_blocks: %d  data_block_pos: %d\n",
+		data_num_blocks, data_block_pos);
+
+	if (loaded_filename)
+		syslog(LOG_WARNING, "loaded_filename: %s\n", loaded_filename);
+}
+
+int ads_read_file(const char *filename, unsigned char *blocks, int num_blocks)
+{
+	if (!filename || !*filename)
+		return -1;
+
+	if (ads_init_file(filename) < 0) {
+		syslog(LOG_WARNING, "ads_read_file: init failed");
+		return -1;
+	}
+
+	int left = num_blocks;
+
+	while (left > 0) {
+		int count = data_num_blocks - data_block_pos;
+
+		if (count > left)
+			count = left;
+
+		memcpy(blocks, &file_data[data_block_pos * ADS_BLOCKSIZE], count * ADS_BLOCKSIZE);
+
+		left -= count;
+		data_block_pos += count;
+
+		if (data_block_pos >= data_num_blocks)
+			data_block_pos = 0;
+	}
+
+	return num_blocks;
 }

@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -Wall -O2
+CFLAGS = -O2 -Wall
 LIBS = -lpthread
 
 OBJS = ads127x.o madasd.o utility.o

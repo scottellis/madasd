@@ -40,12 +40,12 @@ static int add_sig_handlers();
 
 volatile int shutdown_event;
 volatile int disconnect_event;
+volatile int running;
 
 int control_port;
 int debug_mode;
 char data_file[512];
 pthread_t data_thread;
-int running;
 
 void usage(char *argv_0)
 {
@@ -248,8 +248,7 @@ int do_disconnect(int c_sock)
 
 int do_start(int c_sock)
 {
-	//running = 1;
-	running = 0;
+	running = 1;
 
 	return send_response(c_sock, "ok");
 }
@@ -335,7 +334,7 @@ void data_loop(int data_sock)
 
 void data_client_handler(int c_sock)
 {
-	int num_blocks = 1;
+	int num_blocks;
 
 	unsigned char *blocks = (unsigned char *) malloc(BLOCKS_PER_READ * ADS_BLOCKSIZE);
 
@@ -343,7 +342,6 @@ void data_client_handler(int c_sock)
 		return;
 
 	while (!disconnect_event) {
-
 		if (running) {
 			memset(blocks, 0, BLOCKS_PER_READ * ADS_BLOCKSIZE);
 
@@ -352,15 +350,25 @@ void data_client_handler(int c_sock)
 			else
 				num_blocks = ads_read(blocks, BLOCKS_PER_READ);
 
+			if (num_blocks < 0) {
+				syslog(LOG_WARNING, "error reading block data\n");
+				break;
+			}
+
 			if (num_blocks > 0) {
 				int sent = send_binary(c_sock, blocks, num_blocks * ADS_BLOCKSIZE);
 
-				if (sent != (num_blocks * ADS_BLOCKSIZE))
+				if (sent != (num_blocks * ADS_BLOCKSIZE)) {
 					syslog(LOG_WARNING, "error sending binary data\n");
+					break;
+				}
 			}
-		}
 
-		msleep(500);
+			msleep(100);
+		}
+		else {
+			msleep(500);
+		}
 	}
 
 	free(blocks);
