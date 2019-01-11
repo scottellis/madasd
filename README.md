@@ -30,8 +30,8 @@ There are a few command line options
 
     ~/madasng$ ./madasd -h
     Usage: ./madasd [-p<port>][-f<file>][-d]
-      -p     control listener port, data will be port + 1
-      -f     data file from real a capture
+      -p     control listener port, data listener will be port + 1
+      -f     simulated data from a previously captured file
       -d     debug mode, enable some extra output
 
 Some raw data capture files are provided in madasng/data
@@ -40,7 +40,7 @@ Some raw data capture files are provided in madasng/data
     data/ch2_2khz.raw
     data/ch2_noise.raw
 
-They can be passed to the server at startup in which case the data returned will come from the file.
+They can be passed to the server at startup in which case data returned will come from the file.
 
     ~/madasng$ ./madasd -f data/ch2_1khz.raw
 
@@ -52,20 +52,28 @@ Each channel sample is a 32-bit integer, so one 'complete sample' is 8 * 4 = 32 
 
 Each 4096 byte block contains 4096 / 32 = 128 samples.
 
-The server returns 32 blocks of data at a time on the **data** socket. This is configurable in the madasd.c source file.
+You need to know which channels are active in the driver and disregard the ones that are not.
 
-If no data file is provided, the block data will be stuffed with ascii characters, a different character for each block.
+I will implement some config commands to handle this.
+
+The server returns 32 blocks of data at a time on the **data** socket.
+
+This will also be one of the config options, but for now is a constant in the madasd.c source file.
+
+If no data file is provided for simulation, the server will stuff ascii characters into the data, a different character for each block.
 
 ### Testing with Netcat
 
-For explanation I am going to use three terminals **server**, **control** and **data**.
+I am using the 'netcat-openbsd' version of netcat from an Ubuntu machine for these examples.
+ 
+I am going to use three terminals **server**, **control** and **data**.
 
-Start the **server** in a terminal
+Start the **server** in one terminal
 
     ~/madasng$ ./madasd -d
     ./madasd: control listening on port 6000
 
-Either on the same machine or another, start a **control** terminal
+Either on the same machine or another, start a **control** terminal replacing the IP as appropriate.
 
     /tmp$ nc 192.168.10.6 6000
     ok
@@ -101,7 +109,9 @@ Now in the **control** terminal start the driver
     /tmp$ nc localhost 6000
 
 In another **data** terminal open a second connection to the server for the data.
+
 The data port is always the control port + 1.
+
 Pipe this data to a file.
 
     /tmp$ nc localhost 6001 > data.bin
