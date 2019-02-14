@@ -1,17 +1,24 @@
-CC = gcc
-CFLAGS = -O2 -Wall
+PROG = madasd
+SRCS = ads127x.c \
+       madasd.c \
+       utility.c
+
 LIBS = -lpthread
 
-OBJS = ads127x.o madasd.o utility.o
+OBJS = $(SRCS:.c=.o)
 
-TARGET = madasd
+CC = gcc
+CFLAGS = -O2 -Wall
 
-$(TARGET): $(OBJS) 
-	$(CC) $(CFLAGS) $(OBJS) -o $(TARGET) $(LIBS)
+all: $(PROG)
 
-%.o: %.c
-	$(CC) $(CFLAGS) -c -o $@ $<
+$(PROG): $(OBJS)
+	$(CC) $(CFLAGS) $(OBJS) -o $(PROG) $(LIBS)
 
+$(OBJS): %.o: %.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+.PHONY: clean
 clean:
-	rm -f $(OBJS) $(TARGET) 
+	rm -f $(OBJS) $(PROG)
 
