@@ -7,8 +7,8 @@ LIBS = -lpthread
 
 OBJS = $(SRCS:.c=.o)
 
-CC = gcc
-CFLAGS = -O2 -Wall
+# CC = gcc
+# CFLAGS = -O2 -Wall
 
 all: $(PROG)
 
