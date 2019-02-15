@@ -43,7 +43,8 @@ volatile int disconnect_event;
 volatile int running;
 
 int control_port;
-int debug_mode;
+int daemon_mode;
+int verbose;
 char data_file[512];
 pthread_t data_thread;
 
@@ -51,8 +52,9 @@ void usage(char *argv_0)
 {
 	printf("Usage: %s [-p<port>][-f<file>][-d]\n", argv_0);
 	printf("  -p     control listener port, data will be port + 1\n");
+	printf("  -d     daemonize\n");
 	printf("  -f     data file from real a capture\n");
-	printf("  -d     debug mode, enable some extra output\n");
+	printf("  -v     verbose mode, enable some extra logging\n");
 	exit(1);
 }
 
@@ -62,10 +64,11 @@ void parse_args(int argc, char **argv)
 	struct stat sb;
 
 	control_port = DEFAULT_CONTROL_PORT;
-	debug_mode = 0;
+	daemon_mode = 0;
+	verbose = 0;
 	memset(data_file, 0, sizeof(data_file));
 
-	while ((opt = getopt(argc, argv, "p:f:dh")) != -1) {
+	while ((opt = getopt(argc, argv, "p:f:dvh")) != -1) {
 		switch (opt) {
 		case 'p':
 			control_port = strtoul(optarg, NULL, 0);
@@ -99,7 +102,11 @@ void parse_args(int argc, char **argv)
 			break;
 
 		case 'd':
-			debug_mode = 1;
+			daemon_mode = 1;
+			break;
+
+		case 'v':
+			verbose = 1;
 			break;
 
 		case 'h':
@@ -117,6 +124,13 @@ void parse_args(int argc, char **argv)
 int main(int argc, char **argv)
 {
 	parse_args(argc, argv);
+
+	if (daemon_mode) {
+		if (daemon(0, 0)) {
+			perror("daemon");
+			exit(1);
+		}
+	}
 
 	openlog(argv[0], LOG_CONS | LOG_PERROR, LOG_DAEMON);
 
@@ -158,7 +172,7 @@ void control_loop(int control_sock)
 		else {
 			memset(c_ip, 0, sizeof(c_ip));
 
-			if (debug_mode) {
+			if (verbose) {
 				inet_ntop(AF_INET, &c_addr_in.sin_addr, c_ip, INET_ADDRSTRLEN);
 				syslog(LOG_INFO, "new client: %s\n", c_ip);
 			}
@@ -319,7 +333,7 @@ void data_loop(int data_sock)
 			else {
 				memset(c_ip, 0, sizeof(c_ip));
 
-				if (debug_mode) {
+				if (verbose) {
 					inet_ntop(AF_INET, &c_addr_in.sin_addr, c_ip, INET_ADDRSTRLEN);
 					syslog(LOG_INFO, "new data client: %s\n", c_ip);
 				}
