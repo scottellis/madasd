@@ -16,11 +16,11 @@ The server logs to syslog as well stderr.
 
 ### Fetch and Build
 
-    ~$ git clone https://github.com/scottellis/madasng.git
+    ~$ git clone https://github.com/scottellis/madasd.git
 
-    ~$ cd madasng
+    ~$ cd madasd
 
-    ~/madasng$ make
+    ~/madasd$ make
     -Wall -O2 -c -o ads127x.o ads127x.c
     gcc -Wall -O2 -c -o madasd.o madasd.c
     gcc -Wall -O2 -c -o utility.o utility.c
@@ -28,13 +28,14 @@ The server logs to syslog as well stderr.
 
 There are a few command line options
 
-    ~/madasng$ ./madasd -h
-    Usage: ./madasd [-p<port>][-f<file>][-d]
+    ~/madasd$ ./madasd -h
+    Usage: ./madasd [-p<port>][-f<file>][-d][-v]
       -p     control listener port, data listener will be port + 1
+      -d     daemonize
       -f     simulated data from a previously captured file
-      -d     debug mode, enable some extra output
+      -v     verbose mode, enable some extra logging
 
-Some raw data capture files are provided in madasng/data
+Some raw data capture files are provided in madasd/data
 
     data/ch2_1khz.raw
     data/ch2_2khz.raw
@@ -42,7 +43,7 @@ Some raw data capture files are provided in madasng/data
 
 They can be passed to the server at startup in which case data returned will come from the file.
 
-    ~/madasng$ ./madasd -f data/ch2_1khz.raw
+    ~/madasd$ ./madasd -f data/ch2_1khz.raw
 
 The data has the raw ADC format
 
@@ -65,12 +66,12 @@ If no data file is provided for simulation, the server will stuff ascii characte
 ### Testing with Netcat
 
 I am using the 'netcat-openbsd' version of netcat from an Ubuntu machine for these examples.
- 
+
 I am going to use three terminals **server**, **control** and **data**.
 
 Start the **server** in one terminal
 
-    ~/madasng$ ./madasd -d
+    ~/madasd$ ./madasd -v
     ./madasd: control listening on port 6000
 
 Either on the same machine or another, start a **control** terminal replacing the IP as appropriate.
@@ -89,9 +90,9 @@ Either on the same machine or another, start a **control** terminal replacing th
     ok
 
 
-On the **server** terminal where you started madasd you would have seen this with debugging (-d) enabled.
+On the **server** terminal where you started madasd you would have seen this with verbose (-v) enabled.
 
-    ~/madasng$ ./madasd -d
+    ~/madasd$ ./madasd -v
     ./madasd: control listening on port 6000
     ./madasd: new client: 192.168.10.12
     ./madasd: data thread started: port: 6001
@@ -164,9 +165,9 @@ This is very simplistic right now.
 
 The key being two sockets, one control and one data.
 
-You can also test with some data files in the madasng/data dir.
+You can also test with some data files in the madasd/data dir.
 
-    madasng$ ls -l data
+    madasd$ ls -l data
     total 1200
     -rw-r--r-- 1 scott scott 409600 Jan  4 09:31 ch2_1khz.raw
     -rw-r--r-- 1 scott scott 409600 Jan  4 09:31 ch2_2khz.raw
@@ -174,7 +175,7 @@ You can also test with some data files in the madasng/data dir.
 
 The server will cycle through the file for the data it returns.
 
-    madasng$ ./madasd -d -f data/ch2_1khz.raw
+    madasd$ ./madasd -f data/ch2_1khz.raw
 
 There is additional timestamp and gps data that needs to be incorporated into the data stream and so there will be a header to describe this.
 
