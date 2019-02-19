@@ -6,7 +6,7 @@
 #include <string.h>
 #include <syslog.h>
 
-#include "ads127x.h"
+#include "adsinterface.h"
 
 static int data_block_pos;
 static int data_num_blocks;

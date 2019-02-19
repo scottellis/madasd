@@ -1,5 +1,5 @@
 PROG = madasd
-SRCS = ads127x.c \
+SRCS = adsinterface.c \
        madasd.c \
        utility.c
 

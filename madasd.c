@@ -19,7 +19,7 @@
 #include <getopt.h>
 #include <pthread.h>
 
-#include "ads127x.h"
+#include "adsinterface.h"
 #include "utility.h"
 
 #define DEFAULT_CONTROL_PORT 6000
