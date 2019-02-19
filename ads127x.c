@@ -95,11 +95,15 @@ int ads_init_file(const char *filename)
 
 void ads_dump_stats()
 {
+	static int once = 0;
+
+	if (loaded_filename && !once) {
+		syslog(LOG_WARNING, "loaded_filename: %s\n", loaded_filename);
+		once = 1;
+	}
+
 	syslog(LOG_WARNING, "data_num_blocks: %d  data_block_pos: %d\n",
 		data_num_blocks, data_block_pos);
-
-	if (loaded_filename)
-		syslog(LOG_WARNING, "loaded_filename: %s\n", loaded_filename);
 }
 
 int ads_read_file(const char *filename, unsigned char *blocks, int num_blocks)
@@ -112,17 +116,19 @@ int ads_read_file(const char *filename, unsigned char *blocks, int num_blocks)
 		return -1;
 	}
 
-	int left = num_blocks;
+	int copied = 0;
 
-	while (left > 0) {
+	while (copied < num_blocks) {
 		int count = data_num_blocks - data_block_pos;
 
-		if (count > left)
-			count = left;
+		if (count > (num_blocks - copied))
+			count = num_blocks - copied;
 
-		memcpy(blocks, &file_data[data_block_pos * ADS_BLOCKSIZE], count * ADS_BLOCKSIZE);
+		memcpy(blocks + (copied * ADS_BLOCKSIZE),
+			file_data + (data_block_pos * ADS_BLOCKSIZE),
+			count * ADS_BLOCKSIZE);
 
-		left -= count;
+		copied += count;
 		data_block_pos += count;
 
 		if (data_block_pos >= data_num_blocks)
