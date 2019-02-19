@@ -45,6 +45,7 @@ volatile int running;
 int control_port;
 int daemon_mode;
 int verbose;
+int file_mode;
 char data_file[512];
 pthread_t data_thread;
 
@@ -99,6 +100,7 @@ void parse_args(int argc, char **argv)
 				usage(argv[0]);
 			}
 
+			file_mode = 1;
 			break;
 
 		case 'd':
@@ -359,7 +361,7 @@ void data_client_handler(int c_sock)
 		if (running) {
 			memset(blocks, 0, BLOCKS_PER_READ * ADS_BLOCKSIZE);
 
-			if (data_file[0] != 0)
+			if (file_mode)
 				num_blocks = ads_read_file(data_file, blocks, BLOCKS_PER_READ);
 			else
 				num_blocks = ads_read(blocks, BLOCKS_PER_READ);

@@ -3,15 +3,44 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <sys/ioctl.h>
 #include <string.h>
 #include <syslog.h>
 
 #include "adsinterface.h"
 
-static int data_block_pos;
-static int data_num_blocks;
-unsigned char *file_data;
-char *loaded_filename;
+int ads_open_device()
+{
+	int fd = open("/dev/ads127x", O_RDWR);
+
+	if (fd < 0)
+		syslog(LOG_WARNING, "Error opening driver: %m\n");
+
+	return fd;
+}
+
+int get_ioc_value(int fd, int ioc)
+{
+	long val;
+	long result = ioctl(fd, ioc, &val);
+
+	if (result < 0) {
+		syslog(LOG_WARNING, "Driver ioctl error: %m\n");
+		return -1;
+	}
+
+	return (int) val;
+}
+
+int ads_start(int fd)
+{
+	return (5 == write(fd, "start", 5));
+}
+
+int ads_stop(int fd)
+{
+	return (5 == write(fd, "stop", 5));
+}
 
 int ads_read(unsigned char *blocks, int num_blocks)
 {
@@ -27,6 +56,19 @@ int ads_read(unsigned char *blocks, int num_blocks)
 
 	return num_blocks;
 }
+
+/*
+ * ================================================================
+ * Code below this point is used only when data comes from a file.
+ *
+ * Primarily used for testing clients with known/repeatable data.
+ * ================================================================
+ */
+
+static int data_block_pos;
+static int data_num_blocks;
+unsigned char *file_data;
+char *loaded_filename;
 
 int ads_file_loaded(const char *filename)
 {
