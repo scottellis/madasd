@@ -3,30 +3,120 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <sys/ioctl.h>
 #include <string.h>
 #include <syslog.h>
+#include <stdint.h>
 
+#include "utility.h"
 #include "adsinterface.h"
 
-static int data_block_pos;
-static int data_num_blocks;
-unsigned char *file_data;
-char *loaded_filename;
+int device_fd;
+
+int ads_open_device()
+{
+	int fd = open("/dev/ads127x", O_RDWR);
+
+	if (fd < 0)
+		syslog(LOG_WARNING, "Error opening driver: %m\n");
+
+	return fd;
+}
+
+int get_ioc_value(int fd, int ioc)
+{
+	long val;
+	long result = ioctl(fd, ioc, &val);
+
+	if (result < 0) {
+		syslog(LOG_WARNING, "Driver ioctl error: %m\n");
+		return -1;
+	}
+
+	return (int) val;
+}
+
+int ads_start()
+{
+	if (!device_fd) {
+		device_fd = ads_open_device();
+
+		if (device_fd < 0) {
+			device_fd = 0;
+			return -1;
+		}
+	}
+
+	return (5 == write(device_fd, "start", 5));
+}
+
+int ads_stop()
+{
+	if (!device_fd) {
+		device_fd = ads_open_device();
+
+		if (device_fd < 0) {
+			device_fd = 0;
+			return -1;
+		}
+	}
+
+	return (4 == write(device_fd, "stop", 4));
+}
 
 int ads_read(unsigned char *blocks, int num_blocks)
 {
-	static char byte = 'A';
+	int retries, len;
+	int blocks_read;
 
-	for (int i = 0; i < num_blocks; i++) {
-		memset(blocks + (i * ADS_BLOCKSIZE), byte, ADS_BLOCKSIZE);
-		byte++;
+	if (!device_fd) {
+		device_fd = ads_open_device();
 
-		if (byte > 'Z')
-			byte = 'A';
+		if (device_fd < 0) {
+			device_fd = 0;
+			return -1;
+		}
 	}
 
-	return num_blocks;
+	retries = 0;
+	blocks_read = 0;
+
+	while (retries < 5 && blocks_read < (num_blocks + 1)) {
+		len = read(device_fd,
+				blocks + (blocks_read * ADS_BLOCKSIZE),
+				((num_blocks + 1) - blocks_read) * ADS_BLOCKSIZE);
+
+		if (len < 0) {
+			syslog(LOG_WARNING, "Driver read error: %d\n", len);
+			return len;
+		}
+
+		if (len > 0)
+			blocks_read += len / ADS_BLOCKSIZE;
+
+		retries++;
+		msleep(50);
+	}
+
+	return blocks_read;
 }
+
+/*
+ * ================================================================
+ * Code below this point is used only when data comes from a file.
+ *
+ * Primarily used for testing clients with known/repeatable data.
+ * ================================================================
+ */
+
+static int data_block_pos;
+static int data_num_blocks;
+#define MAX_TIMESTAMPS (ADS_BLOCKSIZE / 8)
+#define SAMPLE_RATE_NS 32000
+static uint64_t data_timestamps[MAX_TIMESTAMPS];
+static uint64_t data_last_timestamp;
+unsigned char *file_data;
+char *loaded_filename;
 
 int ads_file_loaded(const char *filename)
 {
@@ -89,6 +179,8 @@ int ads_init_file(const char *filename)
 
 	data_block_pos = 0;
 	data_num_blocks = len / ADS_BLOCKSIZE;
+	data_last_timestamp = 0;
+	memset(data_timestamps, 0, sizeof(data_timestamps));
 
 	return 1;
 }
@@ -135,5 +227,17 @@ int ads_read_file(const char *filename, unsigned char *blocks, int num_blocks)
 			data_block_pos = 0;
 	}
 
-	return num_blocks;
+	for (int i = 0; i < num_blocks; i++) {
+		data_timestamps[i] = data_last_timestamp;
+		data_last_timestamp += SAMPLE_RATE_NS;
+	}
+
+	// append a timestamp block
+	memcpy(blocks + (num_blocks * ADS_BLOCKSIZE), data_timestamps, ADS_BLOCKSIZE);
+
+	// at 8 MHz (DEFAULT_CLKDIV = 12)
+	// 32 blocks = 31.25 us * 128 samples/block * 32 = 128 ms
+	msleep(128);
+
+	return num_blocks + 1;
 }

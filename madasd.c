@@ -45,6 +45,7 @@ volatile int running;
 int control_port;
 int daemon_mode;
 int verbose;
+int file_mode;
 char data_file[512];
 pthread_t data_thread;
 
@@ -99,6 +100,7 @@ void parse_args(int argc, char **argv)
 				usage(argv[0]);
 			}
 
+			file_mode = 1;
 			break;
 
 		case 'd':
@@ -262,13 +264,25 @@ int do_disconnect(int c_sock)
 
 int do_start(int c_sock)
 {
-	running = 1;
+	if (!running) {
+		if (file_mode)
+			running = 1;
+		else
+			running = (ads_start() == 0);
+	}
 
-	return send_response(c_sock, "ok");
+	if (running)
+	    send_response(c_sock, "ok");
+	else
+		send_response(c_sock, "fail");
 }
 
 int do_stop(int c_sock)
 {
+	// unconditionally stop
+	if (!file_mode)
+		ads_stop();
+
 	running = 0;
 
 	return send_response(c_sock, "ok");
@@ -276,10 +290,12 @@ int do_stop(int c_sock)
 
 int do_status(int c_sock)
 {
-	if (running)
-		return send_response(c_sock, "running");
-	else
-		return send_response(c_sock, "idle");
+	if (file_mode) {
+		if (running)
+			return send_response(c_sock, "running");
+		else
+			return send_response(c_sock, "idle");
+	}
 }
 
 static void * data_thread_handler(void *param)
@@ -350,19 +366,22 @@ void data_client_handler(int c_sock)
 {
 	int num_blocks;
 
-	unsigned char *blocks = (unsigned char *) malloc(BLOCKS_PER_READ * ADS_BLOCKSIZE);
+	unsigned char *blocks = (unsigned char *) malloc((BLOCKS_PER_READ + 2) * ADS_BLOCKSIZE);
+	memset(blocks, 0, (BLOCKS_PER_READ + 2) * ADS_BLOCKSIZE);
 
 	if (!blocks)
 		return;
 
 	while (!disconnect_event) {
 		if (running) {
-			memset(blocks, 0, BLOCKS_PER_READ * ADS_BLOCKSIZE);
+			memset(blocks, 0, (BLOCKS_PER_READ + 1) * ADS_BLOCKSIZE);
 
-			if (data_file[0] != 0)
+			if (file_mode) {
 				num_blocks = ads_read_file(data_file, blocks, BLOCKS_PER_READ);
-			else
+			}
+			else {
 				num_blocks = ads_read(blocks, BLOCKS_PER_READ);
+			}
 
 			if (num_blocks < 0) {
 				syslog(LOG_WARNING, "error reading block data\n");
@@ -377,8 +396,6 @@ void data_client_handler(int c_sock)
 					break;
 				}
 			}
-
-			msleep(100);
 		}
 		else {
 			msleep(500);
