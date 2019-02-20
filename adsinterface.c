@@ -82,8 +82,9 @@ int ads_read(unsigned char *blocks, int num_blocks)
 	blocks_read = 0;
 
 	while (retries < 5 && blocks_read < (num_blocks + 1)) {
+		// leave room for timestamp header block at front
 		len = read(device_fd,
-				blocks + (blocks_read * ADS_BLOCKSIZE),
+				blocks + ((blocks_read + 1) * ADS_BLOCKSIZE),
 				((num_blocks + 1) - blocks_read) * ADS_BLOCKSIZE);
 
 		if (len < 0) {
@@ -97,6 +98,10 @@ int ads_read(unsigned char *blocks, int num_blocks)
 		retries++;
 		msleep(50);
 	}
+
+	// move header block to front
+	if (blocks_read == (num_blocks + 1))
+		memcpy(blocks, blocks + (num_blocks * ADS_BLOCKSIZE), ADS_BLOCKSIZE);
 
 	return blocks_read;
 }
@@ -216,7 +221,8 @@ int ads_read_file(const char *filename, unsigned char *blocks, int num_blocks)
 		if (count > (num_blocks - copied))
 			count = num_blocks - copied;
 
-		memcpy(blocks + (copied * ADS_BLOCKSIZE),
+		// leave room at the front for the timestamp header block
+		memcpy(blocks + ((copied + 1) * ADS_BLOCKSIZE),
 			file_data + (data_block_pos * ADS_BLOCKSIZE),
 			count * ADS_BLOCKSIZE);
 
@@ -232,11 +238,12 @@ int ads_read_file(const char *filename, unsigned char *blocks, int num_blocks)
 		data_last_timestamp += SAMPLE_RATE_NS;
 	}
 
-	// append a timestamp block
-	memcpy(blocks + (num_blocks * ADS_BLOCKSIZE), data_timestamps, ADS_BLOCKSIZE);
+	// timestamp header block at the front
+	memcpy(blocks, data_timestamps, ADS_BLOCKSIZE);
 
 	// at 8 MHz (DEFAULT_CLKDIV = 12)
 	// 32 blocks = 31.25 us * 128 samples/block * 32 = 128 ms
+	// fake a delay the real driver will incur
 	msleep(128);
 
 	return num_blocks + 1;

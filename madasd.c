@@ -366,8 +366,10 @@ void data_client_handler(int c_sock)
 {
 	int num_blocks;
 
-	unsigned char *blocks = (unsigned char *) malloc((BLOCKS_PER_READ + 2) * ADS_BLOCKSIZE);
-	memset(blocks, 0, (BLOCKS_PER_READ + 2) * ADS_BLOCKSIZE);
+	// overallocate (2x) for now
+	// still working out how to handle header block
+	unsigned char *blocks = (unsigned char *) malloc((BLOCKS_PER_READ * 2) * ADS_BLOCKSIZE);
+	memset(blocks, 0, (BLOCKS_PER_READ * 2) * ADS_BLOCKSIZE);
 
 	if (!blocks)
 		return;
