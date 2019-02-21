@@ -11,7 +11,7 @@
 #include "utility.h"
 #include "adsinterface.h"
 
-int device_fd;
+static int device_fd;
 
 int ads_open_device()
 {
@@ -69,6 +69,8 @@ int ads_read(unsigned char *blocks, int num_blocks)
 	int retries, len;
 	int blocks_read;
 	int request_size;
+	int pos;
+	int count;
 
 	if (!device_fd) {
 		device_fd = ads_open_device();
@@ -82,17 +84,15 @@ int ads_read(unsigned char *blocks, int num_blocks)
 	retries = 0;
 	blocks_read = 0;
 
-	while (retries < 5 && blocks_read < num_blocks) {
+	while (retries < 3 && blocks_read < num_blocks) {
 		// leave room for timestamp header block at front
-		request_size = ((num_blocks + 1) - blocks_read) * ADS_BLOCKSIZE;
+		request_size = (1 + (num_blocks - blocks_read)) * ADS_BLOCKSIZE;
+		pos = (1 + blocks_read) * ADS_BLOCKSIZE;
 
 		syslog(LOG_WARNING, "Calling read(%d, %d, %d)\n", device_fd,
-				(blocks_read + 1) * ADS_BLOCKSIZE,
-				request_size);
+				pos, request_size);
 
-		len = read(device_fd,
-				blocks + ((blocks_read + 1) * ADS_BLOCKSIZE),
-				request_size);
+		len = read(device_fd, blocks + pos, request_size);
 
 		if (len < 0) {
 			syslog(LOG_WARNING, "Driver read error ret = %d: %m\n", len);
@@ -102,8 +102,15 @@ int ads_read(unsigned char *blocks, int num_blocks)
 		syslog(LOG_WARNING, "Driver read returned %d\n", len);
 
 		if (len > 0) {
-			blocks_read += len / ADS_BLOCKSIZE;
-			syslog(LOG_WARNING, "Driver read %d of %d complete\n", blocks_read, num_blocks + 1);
+			count = len / ADS_BLOCKSIZE;
+			pos += count * ADS_BLOCKSIZE;
+
+                        memcpy(blocks + (blocks_read * sizeof(uint64_t)),
+				blocks + pos, count * sizeof(uint64_t)); 
+		
+			blocks_read += count;
+			
+			syslog(LOG_WARNING, "Driver read %d of %d complete\n", blocks_read, num_blocks);
 		}
 
 		retries++;
