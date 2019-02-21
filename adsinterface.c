@@ -66,11 +66,10 @@ int ads_stop()
 
 int ads_read(unsigned char *blocks, int num_blocks)
 {
-	int retries, len;
-	int blocks_read;
+	int len, retries;
 	int request_size;
-	int pos;
-	int count;
+	int expected_size;
+	int blocks_read;
 
 	if (!device_fd) {
 		device_fd = ads_open_device();
@@ -81,45 +80,37 @@ int ads_read(unsigned char *blocks, int num_blocks)
 		}
 	}
 
-	retries = 0;
 	blocks_read = 0;
+	retries = 0;
+	expected_size = (num_blocks * ADS_BLOCKSIZE) + (num_blocks * sizeof(uint64_t));
+	request_size = (1 + num_blocks) * ADS_BLOCKSIZE;
 
-	while (retries < 3 && blocks_read < num_blocks) {
-		// leave room for timestamp header block at front
-		request_size = (1 + (num_blocks - blocks_read)) * ADS_BLOCKSIZE;
-		pos = (1 + blocks_read) * ADS_BLOCKSIZE;
+	// we should either get expected_size or zero
+	// anything else is an error
 
-		//syslog(LOG_WARNING, "Calling read(%d, %d, %d)\n", device_fd,
-		//		pos, request_size);
+	while (retries < 2 && blocks_read < num_blocks) {
+		// leave room for the timestamp header block at front
+		len = read(device_fd, blocks + ADS_BLOCKSIZE, request_size);
 
-		len = read(device_fd, blocks + pos, request_size);
+		if (len == 0) {
+			retries++;
+			msleep(50);
+			continue;
+		}
 
 		if (len < 0) {
 			syslog(LOG_WARNING, "Driver read error ret = %d: %m\n", len);
 			return len;
 		}
-
-		//syslog(LOG_WARNING, "Driver read returned %d\n", len);
-
-		if (len > 0) {
-			count = len / ADS_BLOCKSIZE;
-			pos += count * ADS_BLOCKSIZE;
-
-                        memcpy(blocks + (blocks_read * sizeof(uint64_t)),
-				blocks + pos, count * sizeof(uint64_t)); 
-		
-			blocks_read += count;
-			
-			// syslog(LOG_WARNING, "Driver read %d of %d complete\n", blocks_read, num_blocks);
+		else if (len != expected_size) {
+			syslog(LOG_WARNING, "Driver read returned %d expected %d\n", len, expected_size);
+			return -1;
 		}
 
-		retries++;
-		msleep(50);
-	}
-
-	// move header block to front
-	if (blocks_read == num_blocks)
+		// move header block to front
 		memcpy(blocks, blocks + (num_blocks * ADS_BLOCKSIZE), num_blocks * sizeof(uint64_t));
+		blocks_read = num_blocks + 1;
+	}
 
 	return blocks_read;
 }

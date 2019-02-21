@@ -272,11 +272,11 @@ int do_start(int c_sock)
 	}
 
 	if (running) {
-		syslog(LOG_WARNING, "do_start(): Success\n");
+		syslog(LOG_INFO, "do_start(): Success\n");
 		send_response(c_sock, "ok");
 	}
 	else {
-		syslog(LOG_WARNING, "do_start(): Fail\n");
+		syslog(LOG_INFO, "do_start(): Fail\n");
 		send_response(c_sock, "fail");
 	}
 }
