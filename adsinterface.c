@@ -84,8 +84,7 @@ int ads_read(unsigned char *blocks, int num_blocks)
 
 	while (retries < 5 && blocks_read < num_blocks) {
 		// leave room for timestamp header block at front
-		request_size = ((num_blocks - blocks_read) * ADS_BLOCKSIZE)
-			+ ((num_blocks - blocks_read) * sizeof(uint64_t));
+		request_size = ((num_blocks + 1) - blocks_read) * ADS_BLOCKSIZE;
 
 		syslog(LOG_WARNING, "Calling read(%d, %d, %d)\n", device_fd,
 				(blocks_read + 1) * ADS_BLOCKSIZE,
