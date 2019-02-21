@@ -268,7 +268,7 @@ int do_start(int c_sock)
 		if (file_mode)
 			running = 1;
 		else
-			running = (ads_start() == 0);
+			running = (ads_start() == 1);
 	}
 
 	if (running)
