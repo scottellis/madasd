@@ -84,7 +84,7 @@ int ads_read(unsigned char *blocks, int num_blocks)
 	retries = 0;
 	blocks_read = 0;
 
-	while (retries < 3 && blocks_read < num_blocks) {
+	while (retries < 2 && blocks_read < num_blocks) {
 		// leave room for timestamp header block at front
 		request_size = (1 + (num_blocks - blocks_read)) * ADS_BLOCKSIZE;
 		pos = (1 + blocks_read) * ADS_BLOCKSIZE;
@@ -114,7 +114,7 @@ int ads_read(unsigned char *blocks, int num_blocks)
 		}
 
 		retries++;
-		msleep(50);
+		msleep(100);
 	}
 
 	// move header block to front
