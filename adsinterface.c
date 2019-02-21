@@ -88,7 +88,7 @@ int ads_read(unsigned char *blocks, int num_blocks)
 				((num_blocks + 1) - blocks_read) * ADS_BLOCKSIZE);
 
 		if (len < 0) {
-			syslog(LOG_WARNING, "Driver read error: %d\n", len);
+			syslog(LOG_WARNING, "Driver read error ret = %d: %m\n", len);
 			return len;
 		}
 

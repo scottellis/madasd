@@ -271,10 +271,14 @@ int do_start(int c_sock)
 			running = (ads_start() == 1);
 	}
 
-	if (running)
-	    send_response(c_sock, "ok");
-	else
+	if (running) {
+		syslog(LOG_WARNING, "do_start(): Success\n");
+		send_response(c_sock, "ok");
+	}
+	else {
+		syslog(LOG_WARNING, "do_start(): Fail\n");
 		send_response(c_sock, "fail");
+	}
 }
 
 int do_stop(int c_sock)
@@ -290,12 +294,10 @@ int do_stop(int c_sock)
 
 int do_status(int c_sock)
 {
-	if (file_mode) {
-		if (running)
-			return send_response(c_sock, "running");
-		else
-			return send_response(c_sock, "idle");
-	}
+	if (running)
+		return send_response(c_sock, "running");
+	else
+		return send_response(c_sock, "idle");
 }
 
 static void * data_thread_handler(void *param)
