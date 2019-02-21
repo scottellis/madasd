@@ -84,13 +84,13 @@ int ads_read(unsigned char *blocks, int num_blocks)
 	retries = 0;
 	blocks_read = 0;
 
-	while (retries < 2 && blocks_read < num_blocks) {
+	while (retries < 3 && blocks_read < num_blocks) {
 		// leave room for timestamp header block at front
 		request_size = (1 + (num_blocks - blocks_read)) * ADS_BLOCKSIZE;
 		pos = (1 + blocks_read) * ADS_BLOCKSIZE;
 
-		syslog(LOG_WARNING, "Calling read(%d, %d, %d)\n", device_fd,
-				pos, request_size);
+		//syslog(LOG_WARNING, "Calling read(%d, %d, %d)\n", device_fd,
+		//		pos, request_size);
 
 		len = read(device_fd, blocks + pos, request_size);
 
@@ -99,7 +99,7 @@ int ads_read(unsigned char *blocks, int num_blocks)
 			return len;
 		}
 
-		syslog(LOG_WARNING, "Driver read returned %d\n", len);
+		//syslog(LOG_WARNING, "Driver read returned %d\n", len);
 
 		if (len > 0) {
 			count = len / ADS_BLOCKSIZE;
@@ -110,11 +110,11 @@ int ads_read(unsigned char *blocks, int num_blocks)
 		
 			blocks_read += count;
 			
-			syslog(LOG_WARNING, "Driver read %d of %d complete\n", blocks_read, num_blocks);
+			// syslog(LOG_WARNING, "Driver read %d of %d complete\n", blocks_read, num_blocks);
 		}
 
 		retries++;
-		msleep(100);
+		msleep(50);
 	}
 
 	// move header block to front
