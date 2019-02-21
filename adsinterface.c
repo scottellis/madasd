@@ -96,8 +96,12 @@ int ads_read(unsigned char *blocks, int num_blocks)
 			return len;
 		}
 
-		if (len > 0)
+		syslog(LOG_WARNING, "Driver read returned %d\n", len);
+
+		if (len > 0) {
 			blocks_read += len / ADS_BLOCKSIZE;
+			syslog(LOG_WARNING, "Driver read %d of %d complete\n", blocks_read, num_blocks + 1);
+		}
 
 		retries++;
 		msleep(50);
