@@ -250,10 +250,10 @@ int ads_read_file(const char *filename, unsigned char *blocks, int num_blocks)
 	// timestamp header block at the front
 	memcpy(blocks, data_timestamps, ADS_BLOCKSIZE);
 
-	// at 8 MHz (DEFAULT_CLKDIV = 12)
-	// 32 blocks = 31.25 us * 128 samples/block * 32 = 128 ms
+	// at 8 MHz (DEFAULT_CLKDIV = 12) a sample takes 32 us
+	// 32 blocks = 32 us * 128 samples/block * 32 = 131.072 ms
 	// fake a delay the real driver will incur
-	msleep(128);
+	msleep(120);
 
 	return num_blocks + 1;
 }
