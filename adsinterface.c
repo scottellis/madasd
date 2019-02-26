@@ -6,7 +6,6 @@
 #include <sys/ioctl.h>
 #include <string.h>
 #include <syslog.h>
-#include <stdint.h>
 
 #include "utility.h"
 #include "adsinterface.h"
@@ -70,6 +69,7 @@ int ads_read(unsigned char *blocks, int num_blocks)
 	int request_size;
 	int expected_size;
 	int blocks_read;
+	struct ads_block_header *header;
 
 	if (!device_fd) {
 		device_fd = ads_open_device();
@@ -108,7 +108,10 @@ int ads_read(unsigned char *blocks, int num_blocks)
 		}
 
 		// move header block to front
-		memcpy(blocks, blocks + (num_blocks * ADS_BLOCKSIZE), num_blocks * sizeof(uint64_t));
+		header = (struct ads_block_header *) blocks;
+		header->magic = ADS_HEADER_MAGIC;
+		header->num_blocks = num_blocks;
+		memcpy(header->timestamps, blocks + (num_blocks * ADS_BLOCKSIZE), num_blocks * sizeof(uint64_t));
 		blocks_read = num_blocks + 1;
 	}
 
@@ -214,6 +217,8 @@ void ads_dump_stats()
 
 int ads_read_file(const char *filename, unsigned char *blocks, int num_blocks)
 {
+	struct ads_block_header *header;
+
 	if (!filename || !*filename)
 		return -1;
 
@@ -248,7 +253,10 @@ int ads_read_file(const char *filename, unsigned char *blocks, int num_blocks)
 	}
 
 	// timestamp header block at the front
-	memcpy(blocks, data_timestamps, ADS_BLOCKSIZE);
+	header = (struct ads_block_header *)blocks;
+	header->magic = ADS_HEADER_MAGIC;
+	header->num_blocks = num_blocks;
+	memcpy(header->timestamps, data_timestamps, num_blocks * sizeof(uint64_t));
 
 	// at 8 MHz (DEFAULT_CLKDIV = 12) a sample takes 32 us
 	// 32 blocks = 32 us * 128 samples/block * 32 = 131.072 ms
