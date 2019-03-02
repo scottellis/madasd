@@ -38,9 +38,10 @@ static void data_client_handler(int c_sock);
 static void sig_handler(int sig);
 static int add_sig_handlers();
 
+pthread_mutex_t lock;
 volatile int shutdown_event;
 volatile int disconnect_event;
-volatile int running;
+int running;
 
 int control_port;
 int daemon_mode;
@@ -123,6 +124,39 @@ void parse_args(int argc, char **argv)
 	}
 }
 
+int isRunning()
+{
+	int val;
+
+	pthread_mutex_lock(&lock);
+	val = running;
+	pthread_mutex_unlock(&lock);
+
+	return val;
+}
+
+int isDisconnected()
+{
+	int val;
+
+	pthread_mutex_lock(&lock);
+	val = disconnect_event;
+	pthread_mutex_unlock(&lock);
+
+	return val;
+}
+
+int isShutdown()
+{
+	int val;
+
+	pthread_mutex_lock(&lock);
+	val = shutdown_event;
+	pthread_mutex_unlock(&lock);
+
+	return val;
+}
+
 int main(int argc, char **argv)
 {
 	parse_args(argc, argv);
@@ -138,6 +172,11 @@ int main(int argc, char **argv)
 
 	add_sig_handlers();
 
+	if (pthread_mutex_init(&lock, NULL)) {
+		syslog(LOG_ERR, "Lock creation failed: %m");
+		exit(1);
+	}
+
 	int control_sock = start_listener(control_port);
 
 	if (control_sock < 0) {
@@ -151,6 +190,8 @@ int main(int argc, char **argv)
 
 	syslog(LOG_INFO, "control listener closed\n");
 
+	pthread_mutex_destroy(&lock);
+
 	closelog();
 
 	return 0;
@@ -163,12 +204,12 @@ void control_loop(int control_sock)
 	int c_sock;
 	char c_ip[INET_ADDRSTRLEN + 8];
 
-	while (!shutdown_event) {
+	while (!isShutdown()) {
 		c_len = sizeof(c_addr_in);
 		c_sock = accept(control_sock, (struct sockaddr *) &c_addr_in, &c_len);
 
 		if (c_sock < 0) {
-			if (!shutdown_event)
+			if (!isShutdown())
 				syslog(LOG_WARNING, "accept: %m\n");
 		}
 		else {
@@ -201,7 +242,7 @@ void client_handler(int c_sock)
 	if (!data_thread)
 		return;
 
-	while (!shutdown_event) {
+	while (!isShutdown()) {
 		memset(rx, 0, sizeof(rx));
 
 		len = read_cmd(c_sock, rx, 32, 2000);
@@ -236,8 +277,10 @@ void client_handler(int c_sock)
 
 int do_connect(int c_sock)
 {
+	pthread_mutex_lock(&lock);
 	disconnect_event = 0;
 	running = 0;
+	pthread_mutex_unlock(&lock);
 
 	if (pthread_create(&data_thread, NULL, data_thread_handler, NULL)) {
 		syslog(LOG_WARNING, "pthread_create: %m\n");
@@ -250,9 +293,10 @@ int do_connect(int c_sock)
 
 int do_disconnect(int c_sock)
 {
+	pthread_mutex_lock(&lock);
 	running = 0;
-
 	disconnect_event = 1;
+	pthread_mutex_unlock(&lock);
 
 	if (data_thread) {
 		pthread_join(data_thread, NULL);
@@ -264,21 +308,23 @@ int do_disconnect(int c_sock)
 
 int do_start(int c_sock)
 {
-	if (!running) {
+	int val;
+
+	if (!isRunning()) {
 		if (file_mode)
-			running = 1;
+			val = 1;
 		else
-			running = (ads_start() == 1);
+			val = (ads_start() == 1);
+
+		pthread_mutex_lock(&lock);
+		running = val;
+		pthread_mutex_unlock(&lock);
 	}
 
-	if (running) {
-		syslog(LOG_INFO, "do_start(): Success\n");
+	if (isRunning())
 		send_response(c_sock, "ok");
-	}
-	else {
-		syslog(LOG_INFO, "do_start(): Fail\n");
+	else
 		send_response(c_sock, "fail");
-	}
 }
 
 int do_stop(int c_sock)
@@ -287,14 +333,16 @@ int do_stop(int c_sock)
 	if (!file_mode)
 		ads_stop();
 
+	pthread_mutex_lock(&lock);
 	running = 0;
+	pthread_mutex_unlock(&lock);
 
 	return send_response(c_sock, "ok");
 }
 
 int do_status(int c_sock)
 {
-	if (running)
+	if (isRunning())
 		return send_response(c_sock, "running");
 	else
 		return send_response(c_sock, "idle");
@@ -332,7 +380,7 @@ void data_loop(int data_sock)
 	timeout.tv_sec = 2;
 	timeout.tv_nsec = 0;
 
-	while (!disconnect_event) {
+	while (!isDisconnected()) {
 		FD_ZERO(&rset);
 		FD_SET(data_sock, &rset);
 
@@ -345,7 +393,7 @@ void data_loop(int data_sock)
 			c_sock = accept(data_sock, (struct sockaddr *) &c_addr_in, &c_len);
 
 			if (c_sock < 0) {
-				if (!disconnect_event)
+				if (!isDisconnected())
 					syslog(LOG_WARNING, "accept: %m\n");
 			}
 			else {
@@ -376,8 +424,8 @@ void data_client_handler(int c_sock)
 	if (!blocks)
 		return;
 
-	while (!disconnect_event) {
-		if (running) {
+	while (!isDisconnected()) {
+		if (isRunning()) {
 			memset(blocks, 0, (BLOCKS_PER_READ + 1) * ADS_BLOCKSIZE);
 
 			if (file_mode) {

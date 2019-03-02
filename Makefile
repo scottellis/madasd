@@ -9,6 +9,8 @@ OBJS = $(SRCS:.c=.o)
 
 # CC = gcc
 # CFLAGS = -O2 -Wall
+#CFLAGS = -fsanitize=address -fno-omit-frame-pointer
+#CFLAGS = -fsanitize=thread -fno-omit-frame-pointer
 
 all: $(PROG)
 
